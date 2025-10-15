@@ -1,103 +1,108 @@
-import Image from "next/image";
+import { cookies } from 'next/headers';
+import { revalidatePath } from 'next/cache';
+import Link from 'next/link';
 
-export default function Home() {
+type Entry = { id: string; song: string; brand: string; ts: number };
+
+async function readEntries(): Promise<Entry[]> {
+  const jar = await cookies();
+  const raw = jar.get('cp_entries')?.value ?? '[]';
+  try { return JSON.parse(raw) as Entry[]; } catch { return []; }
+}
+
+async function writeEntries(list: Entry[]) {
+  const jar = await cookies();
+  jar.set('cp_entries', JSON.stringify(list.slice(0, 200)), {
+    path: '/',
+    httpOnly: false,
+    sameSite: 'lax',
+    secure: true,
+    maxAge: 60 * 60 * 24 * 365, // 1 year
+  });
+}
+
+export default async function Page() {
+  const entries = await readEntries();
+  const suggestions = Array.from(new Set(entries.map(e => e.brand).filter(Boolean))).slice(0, 50);
+
+  // SERVER ACTION: add a song (stays on the same page)
+  async function addAction(formData: FormData) {
+    'use server';
+    const song = String(formData.get('song') || '').trim();
+    const brand = String(formData.get('brand') || '').trim();
+    if (!song) return;
+
+    const list = await readEntries();
+    list.unshift({ id: crypto.randomUUID(), song, brand, ts: Date.now() });
+    await writeEntries(list);
+    revalidatePath('/'); // refresh this page
+  }
+
+  // SERVER ACTION: remove by id
+  async function removeAction(formData: FormData) {
+    'use server';
+    const id = String(formData.get('id') || '');
+    if (!id) return;
+
+    const list = await readEntries();
+    const next = list.filter(e => e.id !== id);
+    await writeEntries(next);
+    revalidatePath('/');
+  }
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <main className="space-y-6">
+      <header className="text-center">
+        <h1 className="text-2xl font-semibold tracking-tight">Chord Picker</h1>
+        <p className="opacity-80 mt-1">Add your favorite songs. Manage them below.</p>
+      </header>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      {/* Add form */}
+      <form action={addAction} className="glass space-y-4">
+        <div>
+          <div className="label">Song name</div>
+          <input name="song" placeholder='e.g., "Sugar"' className="input" required />
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+        <div>
+          <div className="label">Band / Brand</div>
+          <input name="brand" list="brand-options" placeholder='e.g., "Maroon 5"' className="input" />
+          <datalist id="brand-options">
+            {suggestions.map((b) => <option key={b} value={b} />)}
+          </datalist>
+          <p className="text-xs opacity-70 mt-1">Suggestions come from your previous inputs (cookies).</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button className="btn btn-primary">Add song</button>
+          <Link href="/random" className="btn">Randomizer page</Link>
+        </div>
+      </form>
+
+      {/* List + remove */}
+      <section className="glass">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-medium">Your songs</h2>
+          <span className="text-sm opacity-70">{entries.length} saved</span>
+        </div>
+
+        {entries.length === 0 ? (
+          <p className="opacity-80 text-sm">No songs yet — add one above.</p>
+        ) : (
+          <ul className="text-sm space-y-2 max-h-80 overflow-auto pr-1">
+            {entries.map((e) => (
+              <li key={e.id} className="flex items-center justify-between gap-2 border-b border-[var(--border)]/40 pb-2">
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{e.song}</div>
+                  <div className="opacity-70 truncate">{e.brand}</div>
+                </div>
+                <form action={removeAction}>
+                  <input type="hidden" name="id" value={e.id} />
+                  <button className="btn" aria-label={`Remove ${e.song}`}>Remove</button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </main>
   );
 }
