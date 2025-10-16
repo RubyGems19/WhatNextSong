@@ -22,7 +22,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body className="min-h-screen">
-        <div className="mx-auto max-w-md px-4 py-6">{children}</div>
+        <div className="mx-auto w-full max-w-5xl px-4 md:px-6 lg:px-8 py-6">
+          {children}
+        </div>
         <script dangerouslySetInnerHTML={{
           __html: `
             (function() {
