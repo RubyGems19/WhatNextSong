@@ -188,7 +188,7 @@ function add(e: React.FormEvent<HTMLFormElement>) {
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                   setSortBy(e.target.value as SortKey)
                 }
-                className="input dropdown-offset"
+                className="input"
               >
                 <option value="latest">Sort: Latest</option>
                 <option value="song">Sort: Song A–Z</option>
