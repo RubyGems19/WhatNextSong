@@ -3,27 +3,27 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 
-type Entry = { song: string; brand: string };
+type Entry = { id: string; song: string; brand: string; ts: number };
+const KEY = 'cp_entries_v1';
 
 function readEntries(): Entry[] {
   try {
-    const raw = document.cookie.split('; ').find(c => c.startsWith('cp_entries='))?.split('=')[1];
-    if (!raw) return [];
-    return JSON.parse(decodeURIComponent(raw));
+    const raw = localStorage.getItem(KEY);
+    return raw ? (JSON.parse(raw) as Entry[]) : [];
   } catch {
     return [];
   }
 }
 
 export default function RandomPage() {
-  const entries = useMemo(() => readEntries(), []);
+  const [entries, setEntries] = useState<Entry[]>([]);
   const [pick, setPick] = useState<Entry | null>(null);
 
   useEffect(() => {
-    if (entries.length) {
-      setPick(entries[Math.floor(Math.random() * entries.length)]);
-    }
-  }, [entries]);
+    const list = readEntries();
+    setEntries(list);
+    if (list.length) setPick(list[Math.floor(Math.random() * list.length)]);
+  }, []);
 
   const doRandom = () => {
     if (!entries.length) return;
@@ -69,17 +69,13 @@ export default function RandomPage() {
           <button onClick={doRandom} className="btn btn-primary">Randomize</button>
           <button onClick={googleChord} className="btn">Search “Chord” on Google</button>
         </div>
-
-        <div className="text-xs opacity-70">
-          Tip: The search opens <code>“&lt;song&gt; chord”</code> in a new tab.
-        </div>
       </section>
 
       <section className="glass">
         <h2 className="font-medium mb-2">Your list</h2>
         <ul className="text-sm space-y-1 max-h-64 overflow-auto pr-1">
-          {entries.map((e, i) => (
-            <li key={i} className="flex justify-between border-b border-[var(--border)]/40 py-1">
+          {entries.map((e) => (
+            <li key={e.id} className="flex justify-between border-b border-[var(--border)]/40 py-1">
               <span>{e.song}</span>
               <span className="opacity-70">{e.brand}</span>
             </li>
