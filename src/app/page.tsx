@@ -1,53 +1,62 @@
-import { cookies } from 'next/headers';
-import { revalidatePath } from 'next/cache';
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 
 type Entry = { id: string; song: string; brand: string; ts: number };
 
-async function readEntries(): Promise<Entry[]> {
-  const jar = await cookies();
-  const raw = jar.get('cp_entries')?.value ?? '[]';
-  try { return JSON.parse(raw) as Entry[]; } catch { return []; }
+// ----- client storage helpers -----
+const KEY = 'cp_entries_v1';
+
+function safeRead(): Entry[] {
+  try {
+    const raw = localStorage.getItem(KEY);
+    return raw ? (JSON.parse(raw) as Entry[]) : [];
+  } catch {
+    return [];
+  }
 }
 
-async function writeEntries(list: Entry[]) {
-  const jar = await cookies();
-  jar.set('cp_entries', JSON.stringify(list.slice(0, 200)), {
-    path: '/',
-    httpOnly: false,
-    sameSite: 'lax',
-    secure: true,
-    maxAge: 60 * 60 * 24 * 365, // 1 year
-  });
+function safeWrite(list: Entry[]) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(list.slice(0, 200)));
+  } catch {
+    /* ignore quota errors */
+  }
 }
 
-export default async function Page() {
-  const entries = await readEntries();
-  const suggestions = Array.from(new Set(entries.map(e => e.brand).filter(Boolean))).slice(0, 50);
+export default function Page() {
+  const [entries, setEntries] = useState<Entry[]>([]);
 
-  // SERVER ACTION: add a song (stays on the same page)
-  async function addAction(formData: FormData) {
-    'use server';
-    const song = String(formData.get('song') || '').trim();
-    const brand = String(formData.get('brand') || '').trim();
+  // load on mount
+  useEffect(() => {
+    setEntries(safeRead());
+  }, []);
+
+  const suggestions = useMemo(
+    () => Array.from(new Set(entries.map(e => e.brand).filter(Boolean))).slice(0, 50),
+    [entries]
+  );
+
+  // add a song (no redirect)
+  function add(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const song = String(fd.get('song') || '').trim();
+    const brand = String(fd.get('brand') || '').trim();
     if (!song) return;
 
-    const list = await readEntries();
-    list.unshift({ id: crypto.randomUUID(), song, brand, ts: Date.now() });
-    await writeEntries(list);
-    revalidatePath('/'); // refresh this page
+    const next: Entry[] = [{ id: crypto.randomUUID(), song, brand, ts: Date.now() }, ...safeRead()];
+    safeWrite(next);
+    setEntries(next);
+    e.currentTarget.reset();
   }
 
-  // SERVER ACTION: remove by id
-  async function removeAction(formData: FormData) {
-    'use server';
-    const id = String(formData.get('id') || '');
-    if (!id) return;
-
-    const list = await readEntries();
-    const next = list.filter(e => e.id !== id);
-    await writeEntries(next);
-    revalidatePath('/');
+  // remove by id
+  function remove(id: string) {
+    const next = safeRead().filter(e => e.id !== id);
+    safeWrite(next);
+    setEntries(next);
   }
 
   return (
@@ -58,19 +67,21 @@ export default async function Page() {
       </header>
 
       {/* Add form */}
-      <form action={addAction} className="glass space-y-4">
+      <form onSubmit={add} className="glass space-y-4">
         <div>
           <div className="label">Song name</div>
           <input name="song" placeholder='e.g., "Sugar"' className="input" required />
         </div>
+
         <div>
           <div className="label">Band / Brand</div>
           <input name="brand" list="brand-options" placeholder='e.g., "Maroon 5"' className="input" />
           <datalist id="brand-options">
             {suggestions.map((b) => <option key={b} value={b} />)}
           </datalist>
-          <p className="text-xs opacity-70 mt-1">Suggestions come from your previous inputs (cookies).</p>
+          <p className="text-xs opacity-70 mt-1">Suggestions come from your previous inputs.</p>
         </div>
+
         <div className="flex items-center gap-3">
           <button className="btn btn-primary">Add song</button>
           <Link href="/random" className="btn">Randomizer page</Link>
@@ -94,10 +105,9 @@ export default async function Page() {
                   <div className="font-medium truncate">{e.song}</div>
                   <div className="opacity-70 truncate">{e.brand}</div>
                 </div>
-                <form action={removeAction}>
-                  <input type="hidden" name="id" value={e.id} />
-                  <button className="btn" aria-label={`Remove ${e.song}`}>Remove</button>
-                </form>
+                <button className="btn" onClick={() => remove(e.id)} aria-label={`Remove ${e.song}`}>
+                  Remove
+                </button>
               </li>
             ))}
           </ul>
